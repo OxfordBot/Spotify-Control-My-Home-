@@ -1,6 +1,456 @@
 <!DOCTYPE html>
-<html>
-  <body>
-    a
-  </body>
+<html> 
+    <head>
+        <title></title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta2/css/all.min.css" integrity="sha512-YWzhKL2whUzgiheMoBFwW8CKV4qpHQAEuvilg9FAn5VJUDwKZZxkJNuGM4XkWuk94WCrrwslk8yWNGmY1EduTA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+        <style>
+            * {
+                color: #FFFFFF;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                margin: 0;
+                padding: 0;
+                border: 0;
+                outline: 0;
+            }
+            body {
+                background-color: #FFFFFF;
+            }
+            .search-container {
+                padding: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background-color: #333333;
+            }
+            .top {
+                position: fixed;
+                top: 0;
+                width: 100%;
+            }
+            input[type="text"] {
+                color: #000000;
+                padding: 5px;
+                padding-left: 2vh;
+                width: 70%;
+                font-size: 15px;
+                border-top-left-radius: 10px;
+                border-bottom-left-radius: 10px;
+            }
+            .input-container {
+                width: calc(100% - 5px);
+                border-radius: 10px;
+                display: flex;
+            }
+            .search-btn {
+                width: 30%;
+                color: #000000;
+                font-size: 15px;
+                border-top-right-radius: 10px;
+                border-bottom-right-radius: 10px;
+            }
+            .track-container {
+                background-color: #282828;
+                padding: 7.5px;
+                padding-left: 12.5px;
+                width: 100%;
+                text-align: left;
+            }
+            .select-container {
+                overflow-y: scroll;
+                height: 515px;
+                padding-bottom: 5px;
+            }
+            .title {
+                font-size: 15px;
+            }
+            .artist {
+                font-size: 13px;
+                color: #AAAAAA
+            }
+            .connected-to {
+                background-color: #04AA6D;
+                padding: 2.5px;
+                font-size: 12.5px;
+                font-weight: 600;
+                text-align: center;
+                display: none;
+            }
+            .controls {
+                position: fixed;
+                bottom: 0;
+                width: 100%;
+                background-color: #333333;
+                height: 55px;
+            }
+            .track {
+                display: flex;
+            }
+            .track-info {
+                display: flex;
+                margin: 8px;
+                margin-left: 9px;
+            }
+            .info-title {
+                font-size: 14px;
+            }
+            .info-artist {
+                font-size: 12px
+            }
+            .info {
+                padding-left: 12.5px;
+            }
+            img {
+                border-radius: 10%;
+            }
+            .control-click-button {
+                background: rgba(0, 0, 0, 0);
+                position: fixed;
+                right: 0;
+                padding: 6.5px;
+                margin-right: 16px;
+                margin-top: 2.5px
+            }
+            #pause {
+                font-size: 22.5px;
+            }
+            #play {
+                font-size: 19px;
+            }
+            .display {
+                display: none;
+            }
+        </style>
+    </head>
+    <body onload="App.init()">
+        <div class="display">
+            <div class="top" id="top">
+                <div class="connected-to" id="connected"></div>
+                <div class="search-container" id="search">
+                    <div class="input-container">
+                        <input type="text" autocomplete="off" id="text-container">
+                        <button class="search-btn" onclick="App.load()">Search</button>
+                    </div>
+                </div>
+            </div>
+            <div class="select-container" id="select"></div>
+            <div class="controls" id="controls"></div>
+        </div>
+    </body>
+    <script>
+        var redirect_uri = "https://oxfordbot.github.io/Spotify-Control-My-Home-/"
+        const API = (function() {
+            const _requestToken = async (clientId, redirectURI) => {
+                if (window.location.search.length > 0) {
+                    const queries = window.location.search
+                    if (queries.length > 0) {
+                        const params = new URLSearchParams(queries)
+                        const code = params.get("code")
+                        return code
+                    }
+                } else {
+                    let url = "https://accounts.spotify.com/authorize"
+                    const body = document.getElementsByTagName("body")[0]
+                    url += "?client_id=" + clientId
+                    url += "&response_type=code"
+                    url += "&redirect_uri=" + encodeURI(redirectURI)
+                    url += "&show_dialog=true"
+                    url += "&scope=user-read-private user-read-email user-modify-playback-state user-read-playback-position user-library-read streaming user-read-playback-state user-read-recently-played playlist-read-private"
+                    window.location.href = url
+                    return "OK"
+                }
+            }
+            const _authenticateToken = async (code, clientId, clientSecret, redirect_uri) => {
+                let url = "https://accounts.spotify.com/api/token"
+                let a = ""
+                a += "&code=" + code
+                a += "&redirect_uri=" + encodeURI(redirect_uri)
+                a += "&client_id=" + clientId
+                a += "&client_secret=" + clientSecret
+                const result = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type' : 'application/x-www-form-urlencoded', 
+                        'Authorization' : 'Basic ' + btoa(clientId + ':' + clientSecret)
+                    },
+                    body: "grant_type=authorization_code" + a
+                })
+                const data = await result.json()
+                window.history.pushState("", "", redirect_uri)
+                const token = data.access_token
+                localStorage.clear()
+                localStorage.setItem("token", token)
+                localStorage.setItem("code", code)
+                setTimeout(function() {
+                    location.reload()
+                }, 300)
+            }
+            const _getToken = async () => {
+                var client_id = "0b03e149303f41669f3c4a34c576f298"
+                var client_secret = "8706bbc78b0140bd9d17938411a1003a"
+                const token = localStorage.getItem("token")
+                const data = await _me(token)
+                try {
+                    const status = data.error.status
+                    console.log(status)
+                    localStorage.clear()
+                    await _requestToken(client_id, redirect_uri)
+                } catch {
+                    return token
+                }
+            }
+            const _me = async (token) => {
+                const result = await fetch("https://api.spotify.com/v1/me", {
+                    method: 'GET',
+                    headers: {
+                        'Authorization' : "Bearer " + token
+                    }
+                })
+                const data = await result.json()
+                return data
+            }
+            const _search = async (token, query, type) => {
+                const result = await fetch(`https://api.spotify.com/v1/search?q=${query}&type=${type}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization' : "Bearer " + token
+                    }
+                })
+                const data = await result.json()
+                return data
+            }
+            const _getDevices = async (token) => {
+                const result = await fetch("https://api.spotify.com/v1/me/player/devices", {
+                    method: 'GET',
+                    headers: {
+                        'Authorization' : "Bearer " + token
+                    }
+                })
+                const data = await result.json()
+                const devices = data.devices
+                const list = []
+                for (var device in devices) {
+                    device = devices[device]
+                    var id = device.id
+                    var name = device.name
+                    list.push({
+                        name: name,
+                        id: id
+                    })
+                }
+                return list
+            }
+            const _play = async (token, device_id, track_uri) => {
+                const result = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${device_id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        uris: [track_uri]
+                    }),
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization' : "Bearer " + token
+                    }
+                })
+                try {
+                    const data = await result.json()
+                    console.log(data)
+                } catch {}
+            }
+            const _currently_playing = async (token) => {
+                const result = await fetch(`https://api.spotify.com/v1/me/player/currently-playing`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization' : "Bearer " + token
+                    }
+                })
+                const data = await result.json()
+                return data
+            }
+            const _toggle = async (token) => {
+                const result = await fetch(`https://api.spotify.com/v1/me/player/currently-playing`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization' : "Bearer " + token
+                    }
+                })
+                const data = await result.json()
+                try {
+                    const playing = data.is_playing
+                    if (playing === true) {
+                        const result = await fetch("https://api.spotify.com/v1/me/player/pause", {
+                            method: 'PUT',
+                            headers: {
+                                'Authorization' : "Bearer " + token
+                            }
+                        })
+                    } else {
+                        const result = await fetch("https://api.spotify.com/v1/me/player/play", {
+                            method: 'PUT',
+                            headers: {
+                                'Authorization' : "Bearer " + token
+                            }
+                        })
+                    }
+                } catch {
+                    console.log("Not Playing Anything.")
+                }
+            }
+            return {
+                requestToken(clientId, redirectURI) {
+                    return _requestToken(clientId, redirectURI)
+                }, 
+                authenticateToken(code, clientId, clientSecret, redirect_uri) {
+                    _authenticateToken(code, clientId, clientSecret, redirect_uri)
+                },
+                getToken() {
+                    return _getToken()
+                },
+                me(token) {
+                    return _me(token)
+                },
+                search(token, query, type) {
+                    return _search(token, query, type)
+                },
+                getDevices(token) {
+                    return _getDevices(token)
+                },
+                play(token, device_id, track_uri) {
+                    _play(token, device_id, track_uri)
+                },
+                currentlyPlaying(token) {
+                    return _currently_playing(token)
+                },
+                toggle(token) {
+                    _toggle(token)
+                }
+            }
+        })()
+        const App = (function(API) {
+            const load_token = async (clientId, clientSecret) => {
+                const code = await API.requestToken(
+                    clientId,
+                    redirect_uri
+                )
+                if (code != "OK") {
+                    await API.authenticateToken(
+                        code,
+                        clientId,
+                        clientSecret,
+                        redirect_uri
+                    )
+                    try {
+                        await _reload(localStorage.getItem("token"))
+                        run()
+                    } catch {}
+                }
+            }
+            const run = async () => {
+                const token = await API.getToken()
+                const devices = await API.getDevices(token)
+                document.getElementsByTagName("body")[0].style.backgroundColor = "#282828"
+                document.getElementsByClassName("display")[0].style.display = "block"
+                var found = false
+                if (devices.length > 0) {
+                    for (var i in devices) {
+                        var device = devices[i]
+                        if (device.name.toLowerCase() === "volumio") {
+                            found = true
+                            break
+                        }
+                    }
+                    if (found !== true) {
+                        var device = devices[0]
+                    }
+                    document.getElementById("connected").textContent = "Connected to " + device.name
+                    document.getElementById("connected").style.display = "block"
+                    await _reload(token)
+                    localStorage.setItem("loaded_data", JSON.stringify({
+                        token: token,
+                        device_id: device.id
+                    }))
+                } else {
+                    document.getElementById("connected").style.backgroundColor = "#f44336"
+                    document.getElementById("connected").textContent = "No Devices Connected."
+                    document.getElementById("connected").style.display = "block"
+                }
+            }
+            const _reload = async (token) => {
+                try {
+                    const currently_playing = await API.currentlyPlaying(token)
+                    const controls = document.getElementById("controls")
+                    var track = currently_playing.item
+                    var name = track.name
+                    var artist = track.artists[0].name
+                    var image = track.album.images.at(-1)
+                    const playing = currently_playing.is_playing
+                    if (playing === true) {
+                        var status = "pause"
+                    } else {
+                        var status = "play"
+                    }
+                    if (name.length > 30) {
+                        name = name.substring(0,30) + "..."
+                    } 
+                    controls.innerHTML = `<div class="track-info"><img height=38 width=38 src="${image.url}"><div class="info"><p class="info-title">${name}</p><p class="info-artist">${artist}</p></div><button class="control-click-button" id="control-btn"><i class="fas fa-${status}" id="${status}"></i></button></div>`
+                    document.getElementById("control-btn").onclick = function() {
+                        API.toggle(token)
+                        setTimeout(function() {
+                            App.reload(token)
+                        }, 350)
+                    }
+                } catch {
+                    console.log("OK")
+                    const controls = document.getElementById("controls")
+                    controls.setAttribute("style", "display: flex; align-items: center; justify-content: center;")
+                    controls.innerHTML = `Currently Not Playing.`
+                }
+            }
+            const _load = async () => {
+                const query = document.getElementById("text-container").value
+                const data = JSON.parse(localStorage.getItem("loaded_data"))
+                const results = await API.search(data.token, query, "track")
+                const top = document.getElementById("top")
+                document.getElementById("select").innerHTML = ""
+                document.getElementById("select").style.marginTop = top.offsetHeight + 1 + "px"
+                for (var i in results.tracks.items) {
+                    var item = results.tracks.items[i]
+                    var uri = item.uri
+                    var artist = item.artists[0].name
+                    var name = item.name
+                    var image = item.album.images.at(-1)
+                    var track_container = document.createElement("button")
+                    track_container.className = "track-container"
+                    track_container.id = uri
+                    track_container.onclick = function() {
+                        API.play(data.token, data.device_id, this.id)
+                        setTimeout(function() {
+                            App.reload(data.token)
+                        }, 350)
+                    }
+                    track_container.innerHTML = `<div class="track"><img height=42 width=42 src="${image.url}"><div class="info"><p class="title">${name}</p><p class="artist">${artist}</p></div></div>`
+                    document.getElementById("select").appendChild(track_container)
+                }
+            }
+            return {
+                init() {
+                    if (localStorage.getItem("token") != null) {
+                        run()
+                    } else {
+                        var client_id = "0b03e149303f41669f3c4a34c576f298"
+                        var client_secret = "8706bbc78b0140bd9d17938411a1003a"
+                        load_token(client_id, client_secret)
+                    }
+                },
+                reset() {
+                    localStorage.clear()
+                },
+                load() {
+                    _load()
+                },
+                reload(token) {
+                    _reload(token)
+                }
+            }
+        })(API)
+    </script>
 </html>
